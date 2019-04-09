@@ -125,7 +125,6 @@
   <ItemGroup>
     <ClInclude Include="Chat.h" />
     <ClInclude Include="DES.h" />
-    <ClInclude Include="DESConstants.cpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

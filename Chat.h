@@ -30,6 +30,9 @@ public:
 
 private:
 
+	uint64_t key = 0x1610842E20190409;
+	DES encryptor;
+
 	SOCKET ConnectSocket = INVALID_SOCKET;
 	SOCKET ListenSocket = INVALID_SOCKET;
 	SOCKET ClientSocket = INVALID_SOCKET;

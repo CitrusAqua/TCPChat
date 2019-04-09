@@ -1,4 +1,5 @@
 #include "Chat.h"
+
 #include <iostream>
 #include <thread>
 #include <string>
@@ -6,7 +7,6 @@ using namespace std;
 
 
 void Chat::recvLoop() {
-	printf("recvLoop running\n");
 
 	int recvbuflen = DEFAULT_BUFLEN;
 	char recvbuf[DEFAULT_BUFLEN];
@@ -28,6 +28,9 @@ void Chat::recvLoop() {
 		iResult = recv(currentUsingSocket, recvbuf, recvbuflen, 0);
 		if (iResult > 0) {
 			printf("Bytes received: %d\n", iResult);
+			char * decrypted = new char[iResult];
+			encryptor.Decry(recvbuf, iResult, decrypted, iResult, (char *)&key, 8);
+			cout << decrypted << endl;
 		}
 		else if (iResult == 0)
 			printf("Connection closed\n");
@@ -112,7 +115,7 @@ void Chat::chatListen() {
 	connected = true;
 	thread recvThread_(bind(&Chat::recvLoop, this));
 	recvThread_.detach();
-	WSACleanup();
+	//WSACleanup();
 }
 
 
@@ -193,7 +196,18 @@ void Chat::start() {
 			string sendbuf;
 			cin >> sendbuf;
 
-			int iResult = send(currentUsingSocket, sendbuf.c_str(), sendbuf.length(), 0);
+			int datalen = (sendbuf.length() + 1) * 8;
+			cout << datalen << endl;
+
+			char * plain = new char[datalen];
+			char * encrypted = new char[datalen];
+
+			strcpy_s(plain, sendbuf.length() + 1, sendbuf.c_str());
+
+			encryptor.Encry(plain, sendbuf.length() + 1, encrypted, datalen, (char *)&key, 8);
+			cout << encrypted << endl;
+
+			int iResult = send(currentUsingSocket, encrypted, datalen, 0);
 			if (iResult == SOCKET_ERROR) {
 				printf("send failed: %d\n", WSAGetLastError());
 			}
