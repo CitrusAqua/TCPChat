@@ -24,7 +24,7 @@ using namespace std;
 
 class Chat {
 public:
-	Chat(const char* port);
+	Chat();
 	~Chat();
 
 
@@ -38,9 +38,10 @@ private:
 	SOCKET ClientSocket = INVALID_SOCKET;
 	SOCKET currentUsingSocket = INVALID_SOCKET;
 
-	sockaddr_in addr;
 	bool connected = false;
-	const char * listenPort;
+	bool listening = false;
+	string listenPort;
+	char peerAddress[30];
 
 	void recvLoop();
 	void chatListen();

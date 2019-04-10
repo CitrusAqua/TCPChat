@@ -19,7 +19,7 @@ void Chat::recvLoop() {
 	// Initialize Winsock
 	iResult = WSAStartup(MAKEWORD(2, 2), &wsaData);
 	if (iResult != 0) {
-		printf("WSAStartup failed: %d\n", iResult);
+		printf("\nWSAStartup failed: %d\n > ", iResult);
 		return;
 	}
 
@@ -27,15 +27,13 @@ void Chat::recvLoop() {
 	do {
 		iResult = recv(currentUsingSocket, recvbuf, recvbuflen, 0);
 		if (iResult > 0) {
-			printf("Bytes received: %d\n", iResult);
+			printf("\nMessage received from %s\n", peerAddress);
 			char * decrypted = new char[iResult];
 			encryptor.Decry(recvbuf, iResult, decrypted, iResult, (char *)&key, 8);
-			cout << decrypted << endl;
+			printf("\n%s\n > ", decrypted);
 		}
 		else if (iResult == 0)
-			printf("Connection closed\n");
-		else
-			printf("recv failed: %d\n", WSAGetLastError());
+			printf("\nConnection closed\n > ");
 	} while (iResult > 0);
 }
 
@@ -50,7 +48,7 @@ void Chat::chatListen() {
 	// Initialize Winsock
 	iResult = WSAStartup(MAKEWORD(2, 2), &wsaData);
 	if (iResult != 0) {
-		printf("WSAStartup failed: %d\n", iResult);
+		printf("\nWSAStartup failed: %d\n > ", iResult);
 		return;
 	}
 	
@@ -66,7 +64,7 @@ void Chat::chatListen() {
 	// Resolve the local address and port to be used by the server
 	iResult = getaddrinfo(NULL, listenPort, &hints, &result);
 	if (iResult != 0) {
-		printf("getaddrinfo failed: %d\n", iResult);
+		printf("\nNot a legal port number.\n > ");
 		WSACleanup();
 		return;
 	}
@@ -76,7 +74,7 @@ void Chat::chatListen() {
 	ListenSocket = socket(result->ai_family, result->ai_socktype, result->ai_protocol);
 
 	if (ListenSocket == INVALID_SOCKET) {
-		printf("Error at socket(): %ld\n", WSAGetLastError());
+		printf("\nError at socket(): %ld\n > ", WSAGetLastError());
 		freeaddrinfo(result);
 		WSACleanup();
 		return;
@@ -85,7 +83,7 @@ void Chat::chatListen() {
 	// Setup the TCP listening socket
 	iResult = ::bind(ListenSocket, result->ai_addr, (int)result->ai_addrlen);
 	if (iResult == SOCKET_ERROR) {
-		printf("bind failed with error: %d\n", WSAGetLastError());
+		printf("\nPort is already allocated.\n > ");
 		freeaddrinfo(result);
 		closesocket(ListenSocket);
 		WSACleanup();
@@ -95,22 +93,26 @@ void Chat::chatListen() {
 	freeaddrinfo(result);
 
 	if (listen(ListenSocket, SOMAXCONN) == SOCKET_ERROR) {
-		printf("Listen failed with error: %ld\n", WSAGetLastError());
+		printf("\nListen failed with error: %ld\n > ", WSAGetLastError());
 		closesocket(ListenSocket);
 		WSACleanup();
 		return;
 	}
 
+	listening = true;
 
 	// Accept a client socket
-	ClientSocket = accept(ListenSocket, NULL, NULL);
+	sockaddr_in client_info = { 0 };
+	int addrsize = sizeof(client_info);
+	ClientSocket = accept(ListenSocket, (sockaddr*)&client_info, &addrsize);
 	if (ClientSocket == INVALID_SOCKET) {
-		printf("accept failed: %d\n", WSAGetLastError());
 		closesocket(ListenSocket);
 		WSACleanup();
 		return;
 	}
 
+	inet_ntop(AF_INET, (void*)&client_info.sin_addr, peerAddress, 30);
+	printf("\nConnected to %s\n > ", peerAddress);
 	currentUsingSocket = ClientSocket;
 	connected = true;
 	thread recvThread_(bind(&Chat::recvLoop, this));
@@ -119,7 +121,7 @@ void Chat::chatListen() {
 }
 
 
-Chat::Chat(const char* port) : listenPort(port) {
+Chat::Chat() {
 }
 
 
@@ -128,7 +130,13 @@ Chat::~Chat() {
 
 void Chat::start() {
 
-	thread listenThread_(bind(&Chat::chatListen, this));
+	while (!listening) {
+		getline(cin, listenPort);
+		thread listenThread_(bind(&Chat::chatListen, this));
+		while (!listening) {
+			listenThread_.join();
+		}
+	}
 
 	string content;
 
@@ -142,33 +150,37 @@ void Chat::start() {
 	while (true) {
 
 		cout << " > " << flush;
-		cin >> content;
+		getline(cin, content);
+		if (content.length() == 0) {
+			cout << '\r';
+			continue;
+		}
 		if (content == "quit") {
+			closesocket(ListenSocket);
 			return;
 		}
 		else if (content == "connect") {
 
 			if (connected) {
-				cout << "Alread connected! Disconnect before a new connection." << endl;
+				cout << "Alread connected! Disconnect before establishing a new connection." << endl;
 				continue;
 			}
 
 			string dst_ip;
 			string dst_port;
 			cout << "Please input the target ip." << endl;
-			cin >> dst_ip;
+			getline(cin, dst_ip);
 			cout << "Please input the target port." << endl;
-			cin >> dst_port;
+			getline(cin, dst_port);
 
 			int errcode = chatConnect(dst_ip.c_str(), dst_port.c_str());
 
 			if (errcode != 0) {
-				cout << "Unable to connect to server." << endl;
 				continue;
 			}
 
 			cout << "Connection established." << endl;
-
+			strcpy_s(peerAddress, 30, dst_ip.c_str());
 			currentUsingSocket = ConnectSocket;
 			connected = true;
 			closesocket(ListenSocket);
@@ -182,7 +194,13 @@ void Chat::start() {
 				continue;
 			}
 
-
+			int iResult = shutdown(currentUsingSocket, SD_SEND);
+			if (iResult == SOCKET_ERROR) {
+				printf("shutdown failed: %d\n", WSAGetLastError());
+			}
+			connected = false;
+			closesocket(currentUsingSocket);
+			thread listenThread_(bind(&Chat::chatListen, this));
 
 		}
 		else if (content == "send") {
@@ -194,19 +212,13 @@ void Chat::start() {
 
 			cout << "Please enter the message to send:" << endl;
 			string sendbuf;
-			cin >> sendbuf;
+			getline(cin, sendbuf);
 
 			int datalen = (sendbuf.length() + 1) * 8;
-			cout << datalen << endl;
-
 			char * plain = new char[datalen];
 			char * encrypted = new char[datalen];
-
 			strcpy_s(plain, sendbuf.length() + 1, sendbuf.c_str());
-
 			encryptor.Encry(plain, sendbuf.length() + 1, encrypted, datalen, (char *)&key, 8);
-			cout << encrypted << endl;
-
 			int iResult = send(currentUsingSocket, encrypted, datalen, 0);
 			if (iResult == SOCKET_ERROR) {
 				printf("send failed: %d\n", WSAGetLastError());
@@ -241,8 +253,7 @@ int Chat::chatConnect(const char * ip, const char * port) {
 	// Resolve the server address and port
 	iResult = getaddrinfo(ip, port, &hints, &result);
 	if (iResult != 0) {
-		printf("getaddrinfo failed: %d\n", iResult);
-		WSACleanup();
+		printf("Please input a vaild address.\n");
 		return 1;
 	}
 
@@ -261,18 +272,12 @@ int Chat::chatConnect(const char * ip, const char * port) {
 	}
 
 
-	iResult = getaddrinfo(ip, port, &hints, &result);
-	if (iResult != 0) {
-		printf("getaddrinfo failed: %d\n", iResult);
-		return 1;
-	}
-
 	// Connect to server.
 	iResult = connect(ConnectSocket, ptr->ai_addr, (int)ptr->ai_addrlen);
 	if (iResult == SOCKET_ERROR) {
 		closesocket(ConnectSocket);
 		ConnectSocket = INVALID_SOCKET;
-		printf("Unable to connect to server!\n");
+		printf("Unable to connect to server.\n");
 		return 1;
 	}
 
@@ -284,7 +289,7 @@ int Chat::chatConnect(const char * ip, const char * port) {
 	freeaddrinfo(result);
 
 	if (ConnectSocket == INVALID_SOCKET) {
-		printf("Unable to connect to server!\n");
+		printf("Unable to connect to server.\n");
 		return 1;
 	}
 

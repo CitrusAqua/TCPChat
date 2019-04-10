@@ -149,7 +149,6 @@ const uint8_t DES::keychoose[48] =
 int32_t DES::HandleData(uint32_t * left, uint8_t choice)
 {
 	uint32_t *right = &left[1];
-	uint32_t oldright = *right;
 	uint32_t tmpbuf[2] = { 0 };
 
 	int32_t number = 0, j = 0;
@@ -191,7 +190,7 @@ int32_t DES::HandleData(uint32_t * left, uint8_t choice)
 	}
 	else if (choice == DESDECRY) {
 		for (int i = 0; i < 16; i++)
-			MakeData(left, right, 16 - i);
+			MakeData(left, right, 15 - i);
 	}
 
 
@@ -272,6 +271,10 @@ int32_t DES::MakeData(uint32_t * left, uint32_t * right, uint32_t number)
 	exdes_P[1] = 0;
 	*right = 0;
 	for (int j = 0; j < 7; j++) {
+		rexpbuf[j] |= (rexpbuf[j] & pc_by_bit[5]) << 1;
+		rexpbuf[j] &= 0b1011111;
+		rexpbuf[j] |= (rexpbuf[j] & pc_by_bit[0]) << 5;
+		rexpbuf[j] >>= 1;
 		*right |= des_S[j][rexpbuf[j]];
 		*right <<= 4;
 	}
@@ -339,8 +342,7 @@ int32_t DES::MakeFirstKey(uint32_t * keyP)
 
 DES::DES()
 {
-	memset(g_outkey, 0, sizeof(uint32_t) * 32);
-	memset(m_arrBufKey, 0, sizeof(uint32_t) * 2);
+
 }
 
 DES::~DES()
@@ -352,6 +354,10 @@ int32_t DES::Encry(char * pPlaintext, int nPlaintextLength, char * pCipherBuffer
 	if (nKeyLength != 8) {
 		return 0;
 	}
+
+	memset(g_outkey, 0, sizeof(uint32_t) * 32);
+	memset(m_arrBufKey, 0, sizeof(uint32_t) * 2);
+
 	MakeFirstKey((uint32_t *)pKey);
 	int nLenthof32Bits = ((nPlaintextLength + 7) / 8) * 2;
 	if (nCipherBufferLength < nLenthof32Bits * 4) {
@@ -391,6 +397,10 @@ int32_t DES::Decry(char * pCipher, int nCipherBufferLength, char * pPlaintextBuf
 	if (nKeyLength != 8) {
 		return 0;
 	}
+
+	memset(g_outkey, 0, sizeof(uint32_t) * 32);
+	memset(m_arrBufKey, 0, sizeof(uint32_t) * 2);
+
 	MakeFirstKey((uint32_t *)pKey);
 	int nLenthof32Bits = ((nCipherBufferLength + 7) / 8) * 2;
 	if (nPlaintextBufferLength < nLenthof32Bits * 4) {
